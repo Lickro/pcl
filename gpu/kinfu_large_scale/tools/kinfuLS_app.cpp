@@ -1,4 +1,4 @@
-/*
+/* Lickro
 Work in progress: patch by Marco (AUG,19th 2012)
 > oni fixed
 > pcl added: mostly to include rgb treatment while grabbing from PCD files obtained by pcl_openni_grab_frame -noend 
