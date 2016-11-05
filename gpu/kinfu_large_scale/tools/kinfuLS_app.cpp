@@ -299,6 +299,9 @@ struct ImageView
     viewerScene_.setPosition (0, 0);
     viewerDepth_.setWindowTitle ("Kinect Depth stream");
     viewerDepth_.setPosition (640, 0);
+	viewer2D_.setWindowTitle ("View2D from 3D slicing");
+    viewer2D_.setPosition (640, 640);
+	
     //viewerColor_.setWindowTitle ("Kinect RGB stream");
   }
 
@@ -309,21 +312,27 @@ struct ImageView
     {
       raycaster_ptr_->run ( kinfu.volume (), *pose_ptr, kinfu.getCyclicalBufferStructure () ); //says in cmake it does not know it
       raycaster_ptr_->generateSceneView(view_device_);
+	  raycaster_ptr_->generateSceneView(view_2d_device_);
     }
     else
     {
       kinfu.getImage (view_device_);
+	  kinfu.getImage (view_2d_device_);
     }
 
     if (paint_image_ && registration && !pose_ptr)
     {
       colors_device_.upload (rgb24.data, rgb24.step, rgb24.rows, rgb24.cols);
       paint3DView (colors_device_, view_device_);
+	  paint3DView (colors_device_, view_2d_device_);
     }
 
     int cols;
     view_device_.download (view_host_, cols);
+	view_2d_device_.download (view_host_, cols);
+
     viewerScene_.showRGBImage (reinterpret_cast<unsigned char*> (&view_host_[0]), view_device_.cols (), view_device_.rows ());    
+	viewer2D_.showRGBImage (reinterpret_cast<unsigned char*> (&view_host_[0]), view_2d_device_.cols (), view_2d_device_.rows ());
 
           //viewerColor_.showRGBImage ((unsigned char*)&rgb24.data, rgb24.cols, rgb24.rows);
 #ifdef HAVE_OPENCV
@@ -367,11 +376,13 @@ struct ImageView
 
   visualization::ImageViewer viewerScene_; //view the raycasted model
   visualization::ImageViewer viewerDepth_; //view the current depth map
+  visualization::ImageViewer viewer2D_;
   //visualization::ImageViewer viewerColor_;
 
   KinfuTracker::View view_device_;
   KinfuTracker::View colors_device_;
   vector<pcl::gpu::kinfuLS::PixelRGB> view_host_;
+  KinfuTracker::View view_2d_device_;
 
   RayCaster::Ptr raycaster_ptr_;
 
@@ -1102,6 +1113,7 @@ struct KinFuLSApp
 
   pcl::Grabber& capture_;
   KinfuTracker *kinfu_;
+  KinfuTracker *kinfu_2d_;
 
   SceneCloudView scene_cloud_view_;
   ImageView image_view_;
