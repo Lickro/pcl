@@ -291,6 +291,107 @@ struct CurrentFrameCloudView
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct CurrentCloudView
+{
+  CurrentCloudView() : cloud_viewer_ ("CurrentCloudView")
+  {
+    cloud_ptr_ = PointCloud<PointXYZ>::Ptr (new PointCloud<PointXYZ>);
+    cloud_viewer_.setBackgroundColor (0, 0, 0.15);
+    cloud_viewer_.setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 1);
+    cloud_viewer_.addCoordinateSystem (1.0, "global");
+    cloud_viewer_.initCameraParameters ();
+    cloud_viewer_.setPosition (0, 500);
+    cloud_viewer_.setSize (640, 480);
+    cloud_viewer_.setCameraClipDistances (0.01, 10.01);
+  }
+
+  void
+  show (const KinfuTracker& kinfu)
+  {
+	//for current PointCloud in GPU memory
+	DeviceArray<PointXYZ> extracted = kinfu.volume().fetchCloud(cloud_device_);
+	extracted.download (cloud_ptr_->points);
+	cloud_ptr_->width = (int)cloud_ptr_->points.size ();
+    cloud_ptr_->height = 1;
+    cloud_ptr_->is_dense = false;
+
+    cloud_viewer_.removeAllPointClouds ();
+    cloud_viewer_.addPointCloud<PointXYZ>(cloud_ptr_);
+    cloud_viewer_.spinOnce ();
+  }
+
+  void
+  setViewerPose (const Eigen::Affine3f& viewer_pose) {
+    ::setViewerPose (cloud_viewer_, viewer_pose);
+  }
+
+  PointCloud<PointXYZ>::Ptr cloud_ptr_;
+  DeviceArray<PointXYZ> cloud_device_;
+  visualization::PCLVisualizer cloud_viewer_;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct PlaneCloudView
+{
+  PlaneCloudView() : cloud_viewer_ ("PlaneCloudView")
+  {
+	cloud_ptr_ = PointCloud<pcl::PointXYZI>::Ptr (new PointCloud<pcl::PointXYZI>);
+    cloud_viewer_.setBackgroundColor (0, 0, 0.15);
+    cloud_viewer_.setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 1);
+    cloud_viewer_.addCoordinateSystem (100, "global");
+    cloud_viewer_.initCameraParameters ();
+    cloud_viewer_.setPosition (0, 500);
+    cloud_viewer_.setSize (640, 480);
+    cloud_viewer_.setCameraClipDistances (0.01, 10.01);
+  }
+
+  void
+  show (KinfuTracker& kinfu)
+  {
+	setViewerPose (kinfu.getCameraPose ());
+	cloud_ptr_->clear();
+    
+	
+	//for shifted world PointCloud in CPU memory
+	float max_y = kinfu.getCyclical().getWorldModel()->getWorld()->points.at(0).y;
+	float min_y = kinfu.getCyclical().getWorldModel()->getWorld()->points.at(0).y;
+	for (size_t i = 0; i < kinfu.getCyclical().getWorldModel()->getWorld()->points.size(); ++i)
+	  {
+		  pcl::PointXYZI p = kinfu.getCyclical().getWorldModel()->getWorld()->points.at(i);
+		  //if(  p.y > 200 &&  p.y < 210) 
+	      cloud_ptr_->push_back(p);
+		  if(p.y > max_y) max_y = p.y;
+		  if(p.y < min_y) min_y = p.y;
+	  }
+	cout <<  cloud_ptr_->size() << " " << kinfu.getCyclical().getWorldModel()->getWorld()->points.size() << " " << min_y << " " << max_y; 
+	cloud_viewer_.removeAllPointClouds ();
+    cloud_viewer_.addPointCloud<pcl::PointXYZI>(cloud_ptr_);
+    cloud_viewer_.spinOnce ();
+  }
+
+  void
+  setViewerPose (const Eigen::Affine3f& viewer_pose) {
+    ::setViewerPose (cloud_viewer_, viewer_pose);
+  }
+
+  PointCloud<pcl::PointXYZI>::Ptr cloud_ptr_;
+  DeviceArray2D<PointXYZ> cloud_device_;
+  visualization::PCLVisualizer cloud_viewer_;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
 struct ImageView
 {
   ImageView() : paint_image_ (false), accumulate_views_ (false)
@@ -299,8 +400,6 @@ struct ImageView
     viewerScene_.setPosition (0, 0);
     viewerDepth_.setWindowTitle ("Kinect Depth stream");
     viewerDepth_.setPosition (640, 0);
-	viewer2D_.setWindowTitle ("View2D from 3D slicing");
-    viewer2D_.setPosition (640, 640);
 	
     //viewerColor_.setWindowTitle ("Kinect RGB stream");
   }
@@ -312,27 +411,22 @@ struct ImageView
     {
       raycaster_ptr_->run ( kinfu.volume (), *pose_ptr, kinfu.getCyclicalBufferStructure () ); //says in cmake it does not know it
       raycaster_ptr_->generateSceneView(view_device_);
-	  raycaster_ptr_->generateSceneView(view_2d_device_);
     }
     else
     {
       kinfu.getImage (view_device_);
-	  kinfu.getImage (view_2d_device_);
     }
 
     if (paint_image_ && registration && !pose_ptr)
     {
       colors_device_.upload (rgb24.data, rgb24.step, rgb24.rows, rgb24.cols);
       paint3DView (colors_device_, view_device_);
-	  paint3DView (colors_device_, view_2d_device_);
     }
 
     int cols;
     view_device_.download (view_host_, cols);
-	view_2d_device_.download (view_host_, cols);
 
     viewerScene_.showRGBImage (reinterpret_cast<unsigned char*> (&view_host_[0]), view_device_.cols (), view_device_.rows ());    
-	viewer2D_.showRGBImage (reinterpret_cast<unsigned char*> (&view_host_[0]), view_2d_device_.cols (), view_2d_device_.rows ());
 
           //viewerColor_.showRGBImage ((unsigned char*)&rgb24.data, rgb24.cols, rgb24.rows);
 #ifdef HAVE_OPENCV
@@ -376,13 +470,11 @@ struct ImageView
 
   visualization::ImageViewer viewerScene_; //view the raycasted model
   visualization::ImageViewer viewerDepth_; //view the current depth map
-  visualization::ImageViewer viewer2D_;
   //visualization::ImageViewer viewerColor_;
 
   KinfuTracker::View view_device_;
   KinfuTracker::View colors_device_;
   vector<pcl::gpu::kinfuLS::PixelRGB> view_host_;
-  KinfuTracker::View view_2d_device_;
 
   RayCaster::Ptr raycaster_ptr_;
 
@@ -758,7 +850,7 @@ struct KinFuLSApp
     Eigen::Matrix3f Rid = Eigen::Matrix3f::Identity ();   // * AngleAxisf( pcl::deg2rad(-30.f), Vector3f::UnitX());
     Eigen::Vector3f T = Vector3f (0, 0, -volume_size(0)*1.5f);
     delta_lost_pose_ = Eigen::Translation3f (T) * Eigen::AngleAxisf (Rid); 
-    
+    initCurrentCloudView ();
   }
 
   ~KinFuLSApp()
@@ -774,6 +866,22 @@ struct KinFuLSApp
     current_frame_cloud_view_->cloud_viewer_.registerKeyboardCallback (keyboard_callback, (void*)this);
     current_frame_cloud_view_->setViewerPose (kinfu_->getCameraPose ());
   }
+
+  void
+  initPlaneCloudView ()
+  {
+    plane_cloud_view_ = boost::shared_ptr<PlaneCloudView>(new PlaneCloudView ());
+	plane_cloud_view_->cloud_viewer_.initCameraParameters ();
+  }
+
+
+  void
+  initCurrentCloudView ()
+  {
+    current_cloud_view_ = boost::shared_ptr<CurrentCloudView>(new CurrentCloudView ());
+	current_cloud_view_->cloud_viewer_.initCameraParameters ();
+  }
+
 
   void
   initRegistration ()
@@ -834,6 +942,10 @@ struct KinFuLSApp
         else
           has_image = (*kinfu_) (depth_device_);
       }
+
+	  //if(kinfu_->hasShifted()) plane_cloud_view_->show((*kinfu_));
+	  current_cloud_view_->show (*kinfu_);
+
 
       image_view_.showDepth (depth_);
       //image_view_.showGeneratedDepth(kinfu_, kinfu_->getCameraPose());
@@ -1113,12 +1225,13 @@ struct KinFuLSApp
 
   pcl::Grabber& capture_;
   KinfuTracker *kinfu_;
-  KinfuTracker *kinfu_2d_;
 
   SceneCloudView scene_cloud_view_;
   ImageView image_view_;
   boost::shared_ptr<CurrentFrameCloudView> current_frame_cloud_view_;
-
+  boost::shared_ptr<PlaneCloudView> plane_cloud_view_;
+  boost::shared_ptr<CurrentCloudView> current_cloud_view_;
+  
   KinfuTracker::DepthMap depth_device_;
 
   pcl::PointCloud<pcl::PointXYZI>::Ptr tsdf_cloud_ptr_;

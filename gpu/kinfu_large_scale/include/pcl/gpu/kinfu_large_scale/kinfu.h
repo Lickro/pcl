@@ -212,6 +212,12 @@ namespace pcl
             return (cyclical_.getBuffer ());
           }
           
+		  CyclicalBuffer& 
+          getCyclical()
+          {
+            return cyclical_;
+          }
+
           /** \brief Extract the world and save it.
             */
           void

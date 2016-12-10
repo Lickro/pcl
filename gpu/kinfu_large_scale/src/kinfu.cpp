@@ -657,8 +657,10 @@ pcl::gpu::kinfuLS::KinfuTracker::operator() (const DepthMap& depth_raw)
   has_shifted_ = cyclical_.checkForShift(tsdf_volume_, getCameraPose (), 0.6 * volume_size_, true, perform_last_scan_); // TODO make target distance from camera a param
   if(has_shifted_)
     PCL_WARN ("SHIFTING\n");
+ 
+	///////////////////////////////////////////////////////////////////////////////////////////
   
-  ///////////////////////////////////////////////////////////////////////////////////////////
+
   // get the NEW local pose as device types
   Mat33  device_current_rotation_inv, device_current_rotation;   
   float3 device_current_translation_local;   
